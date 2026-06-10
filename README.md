@@ -43,10 +43,10 @@ n8n (self-hosted on VPS)
 | Vector Database | Qdrant | Free |
 | LLM | Groq — Llama 3.1 8b Instant | Free |
 | Chat Interface | Telegram Bot | Free |
-| VPS | InterServer (1 Core, 2GB RAM) | ~$6/month |
-| Domain & SSL | Custom domain + Let's Encrypt | ~$1/month |
+| VPS | InterServer (1 Core, 2GB RAM) | ~$3/month |
+| Domain & SSL | Custom domain + Let's Encrypt | ~$1/year |
 
-**Total cost: ~$7/month**
+**Total cost: ~$3/month**
 
 ---
 
@@ -169,7 +169,7 @@ OUTPUT_DIM    = 768    # embedding dimensions
 
 ---
 
-## 👤 Author
+## 👤 Miqdad
 
 Built as a portfolio project to demonstrate end-to-end AI engineering skills:
 - Data Engineering (Databricks, Delta Lake)
