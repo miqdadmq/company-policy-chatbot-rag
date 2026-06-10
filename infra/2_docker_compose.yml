@@ -1,0 +1,48 @@
+# ============================================================
+# Script 2: Docker Compose
+# Save in /opt/chatbot/docker-compose.yml
+# Run: docker compose up -d
+# ============================================================
+
+services:
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      # Replace with your VPS IP or domain
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - WEBHOOK_URL=http://YOUR_VPS_IP:5678
+      # Indonesia Timezone
+      - GENERIC_TIMEZONE=Asia/Jakarta
+      - TZ=Asia/Jakarta
+      # Basic auth to prevent n8n from being publicly exposed
+      - N8N_BASIC_AUTH_ACTIVE=true
+      - N8N_BASIC_AUTH_USER=admin
+      - N8N_BASIC_AUTH_PASSWORD=change_this_password
+    volumes:
+      - /opt/chatbot/n8n_data:/home/node/.n8n
+    depends_on:
+      - qdrant
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - /opt/chatbot/qdrant_data:/qdrant/storage
+
+# ============================================================
+# Useful commands:
+#   docker compose up -d          → run all services
+#   docker compose logs -f n8n    → view n8n logs
+#   docker compose down           → stop all services
+#   docker compose pull           → update to the latest images
+# ============================================================
