@@ -1,0 +1,326 @@
+{
+  "name": "Company Policy Chatbot — Telegram",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body || $input.first().json;\nconst chunks = body.chunks || [];\nconsole.log(`Batch ${body.batch_number}/${body.total_batches} — ${chunks.length} chunks`);\nreturn chunks.map(chunk => ({ json: chunk }));"
+      },
+      "id": "57d4f430-119c-4177-921a-61add4c40783",
+      "name": "Extract Chunks",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [224, 0],
+      "notes": "Split each chunk into separate items for processing"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "policy-ingest",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "11248054-3f9d-49ab-a7e2-14d581b2bf4b",
+      "name": "Webhook — Receive from Databricks",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "webhookId": "567a83d3-6539-46a7-a103-15f5bc9bf5ec",
+      "notes": "Endpoint: POST /webhook/policy-ingest\nDatabricks sends batch chunks here"
+    },
+    {
+      "parameters": {
+        "updates": ["message"],
+        "additionalFields": {}
+      },
+      "id": "7ef214e6-ca8a-43fd-b001-a18c3eeb372c",
+      "name": "Telegram Trigger — User Question",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.1,
+      "position": [0, 304],
+      "webhookId": "3485b86e-506d-4750-a6d0-54a2a8c0e1f5",
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot"
+        }
+      },
+      "notes": "Create a bot via @BotFather on Telegram.\nPaste the API token into n8n credentials."
+    },
+    {
+      "parameters": {
+        "jsCode": "const msg = $input.first().json;\nconst chatId = msg.message.chat.id;\nconst question = msg.message.text;\nconst firstName = msg.message.from.first_name || 'there';\n\n// Skip /start command\nif (question.startsWith('/start')) {\n  return [{ json: { is_start: true, chat_id: chatId, first_name: firstName, question: '' } }];\n}\n\nreturn [{ json: { is_start: false, chat_id: chatId, first_name: firstName, question } }];"
+      },
+      "id": "9a1b910d-227a-425a-b828-ef5d9b4b7365",
+      "name": "Extract Message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [224, 304],
+      "notes": "Extract chat_id and question text from Telegram payload"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.is_start }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              },
+              "id": "cde03ae7-dc31-4792-93e5-b3414b5ef1e7"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4ffd4840-8240-44f0-8347-d8cb951b1577",
+      "name": "Check /start Command",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [448, 304],
+      "notes": "If user sends /start, reply with welcome message"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ `👋 Hi ${$json.first_name}! I'm your Company Policy Assistant.\\n\\nAsk me anything about our company policies — leave, IT, code of conduct, and more.\\n\\nExample questions:\\n• How many annual leave days do I get?\\n• What is the IT equipment policy?\\n• What is the dress code policy?` }}",
+        "additionalFields": {
+          "appendAttribution": false,
+          "parse_mode": "HTML"
+        }
+      },
+      "id": "a6a43fe2-e689-4d16-a770-f290b7384b4e",
+      "name": "Send Greeting Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [672, 208],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "⏳ Looking that up for you...",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "24d17ff9-fe91-4f32-aed5-f76644e38033",
+      "name": "Send Loading Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [672, 384],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot"
+        }
+      },
+      "notes": "Send a temporary message so the user knows the bot is processing"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-2:embedContent",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpQueryAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"models/gemini-embedding-2\",\n  \"content\": {\n    \"parts\": [{\"text\": \"{{ $('Extract Message').first().json.question }}\"}]\n  },\n  \"outputDimensionality\": 768\n}",
+        "options": {}
+      },
+      "id": "133c7c3e-a342-48d4-89cc-ece52ac88d3e",
+      "name": "Gemini — Embed Question",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 384],
+      "credentials": {
+        "httpQueryAuth": {
+          "name": "Gemini API"
+        }
+      },
+      "notes": "Embed user question into a 768-dimension vector\nAdd your Gemini API key to n8n credentials (HTTP Query Auth, name: key)"
+    },
+    {
+      "parameters": {
+        "jsCode": "const results  = $input.first().json.result || [];\nconst question = $('Extract Message').first().json.question;\nconst chatId   = $('Extract Message').first().json.chat_id;\n\n// No relevant results found\nif (results.length === 0) {\n  return [{ json: {\n    chat_id: chatId,\n    prompt: '',\n    no_result: true\n  }}];\n}\n\nconst context = results\n  .map((r, i) => {\n    const p = r.payload;\n    return `[${i+1}] Source: ${p.topic} (${p.source_file}, page ${p.page})\\n${p.text}`;\n  })\n  .join('\\n\\n---\\n\\n');\n\nconst prompt = `You are a helpful HR assistant for company policies.\nAnswer the employee's question based ONLY on the policy documents below.\nIf the answer is not in the documents, say you could not find it and suggest contacting HR.\nAlways mention which policy document your answer comes from.\nKeep your answer concise and friendly. Use plain text only, no markdown.\n\nPOLICY DOCUMENTS:\n${context}\n\nEMPLOYEE QUESTION: ${question}\n\nANSWER:`;\n\nreturn [{ json: { chat_id: chatId, prompt, no_result: false } }];"
+      },
+      "id": "56375a61-100c-4a8a-b034-2c5ff25ccd5c",
+      "name": "Arrange RAG Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1328, 384]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.no_result }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "70554fa4-49cb-488b-9075-366972cabff2",
+      "name": "Result Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [1552, 384]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "Sorry, I couldn't find anything related to your question in our policy documents. Please contact HR directly for assistance.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "4c3c03c5-08d3-4a96-8583-b25e21413999",
+      "name": "Send Not Found Message",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [1968, 288],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.first().json;\n\nconst chatId = item.chat_id\n  || $('Extract Message').first().json.chat_id;\n\nconst answer = item.answer || item.text || 'Sorry, I could not generate a response.';\n\nreturn [{ json: { chat_id: chatId, answer } }];"
+      },
+      "id": "63780a60-8cda-42ba-b058-58527e476259",
+      "name": "Format Answer",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2176, 512]
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.answer }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "6ffa1d3b-09bb-4cdf-a447-648b7d8f39f3",
+      "name": "Send Answer to Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [2400, 512],
+      "credentials": {
+        "telegramApi": {
+          "name": "Telegram Bot"
+        }
+      },
+      "notes": "Send final answer to user on Telegram"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\n\nconst id = Math.abs(item.chunk_id.split('').reduce((a, b) => {\n  a = ((a << 5) - a) + b.charCodeAt(0);\n  return a & a;\n}, 0));\n\nconst payload = {\n  points: [\n    {\n      id: id,\n      vector: item.embedding,\n      payload: {\n        chunk_id: item.chunk_id,\n        source_file: item.source_file,\n        topic: item.topic,\n        page: item.page,\n        text: item.text\n      }\n    }\n  ]\n};\n\nawait this.helpers.httpRequest({\n  method: 'PUT',\n  url: 'http://YOUR_QDRANT_IP:6333/collections/policy_chunks/points',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify(payload),\n});\n\nreturn { json: { saved: \"ok\" } };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [432, 0],
+      "id": "5dc024b1-8a84-4afe-a8c0-c514f11e0f94",
+      "name": "Save to Qdrant",
+      "notes": "Replace YOUR_QDRANT_IP with your Qdrant container IP.\nRun: docker inspect qdrant | grep IPAddress"
+    },
+    {
+      "parameters": {
+        "jsCode": "const embedding = $input.first().json.embedding;\nconst vector = embedding.values || embedding;\n\nconst response = await this.helpers.httpRequest({\n  method: 'POST',\n  url: 'http://YOUR_QDRANT_IP:6333/collections/policy_chunks/points/search',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({\n    vector: vector,\n    top: 5,\n    with_payload: true,\n    score_threshold: 0.3\n  }),\n});\n\nreturn [{ json: response }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1088, 384],
+      "id": "5866ca6b-4e4f-4233-baed-47e0227f809e",
+      "name": "Qdrant Search",
+      "notes": "Replace YOUR_QDRANT_IP with your Qdrant container IP.\nRun: docker inspect qdrant | grep IPAddress"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Replace with your Groq API key\n// Get a free key at: https://console.groq.com\nconst GROQ_API_KEY = \"YOUR_GROQ_API_KEY_HERE\";\n\nconst promptNode = $input.first().json;\nconst prompt = promptNode.prompt;\nconst chatId = promptNode.chat_id;\n\nlet answer = 'Sorry, could not generate a response. Please try again.';\n\ntry {\n  const response = await this.helpers.httpRequest({\n    method: 'POST',\n    url: 'https://api.groq.com/openai/v1/chat/completions',\n    headers: {\n      'Content-Type': 'application/json',\n      'Authorization': `Bearer ${GROQ_API_KEY}`\n    },\n    body: JSON.stringify({\n      model: 'llama-3.1-8b-instant',\n      messages: [{ role: 'user', content: prompt }],\n      temperature: 0.2,\n      max_tokens: 1024\n    }),\n  });\n  answer = response?.choices?.[0]?.message?.content || answer;\n} catch(e) {\n  answer = 'Sorry, could not generate a response. Error: ' + e.message;\n}\n\nreturn [{ json: { chat_id: chatId, answer } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1904, 512],
+      "id": "39d318fe-0a23-44aa-b1bd-40f8d38efe9a",
+      "name": "Groq — Generate Answer",
+      "notes": "Replace YOUR_GROQ_API_KEY_HERE with your Groq API key.\nGet a free key at: https://console.groq.com"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract Chunks": {
+      "main": [[{ "node": "Save to Qdrant", "type": "main", "index": 0 }]]
+    },
+    "Webhook — Receive from Databricks": {
+      "main": [[{ "node": "Extract Chunks", "type": "main", "index": 0 }]]
+    },
+    "Telegram Trigger — User Question": {
+      "main": [[{ "node": "Extract Message", "type": "main", "index": 0 }]]
+    },
+    "Extract Message": {
+      "main": [[{ "node": "Check /start Command", "type": "main", "index": 0 }]]
+    },
+    "Check /start Command": {
+      "main": [
+        [{ "node": "Send Greeting Message", "type": "main", "index": 0 }],
+        [{ "node": "Send Loading Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "Send Loading Message": {
+      "main": [[{ "node": "Gemini — Embed Question", "type": "main", "index": 0 }]]
+    },
+    "Gemini — Embed Question": {
+      "main": [[{ "node": "Qdrant Search", "type": "main", "index": 0 }]]
+    },
+    "Qdrant Search": {
+      "main": [[{ "node": "Arrange RAG Prompt", "type": "main", "index": 0 }]]
+    },
+    "Arrange RAG Prompt": {
+      "main": [[{ "node": "Result Check", "type": "main", "index": 0 }]]
+    },
+    "Result Check": {
+      "main": [
+        [{ "node": "Send Not Found Message", "type": "main", "index": 0 }],
+        [{ "node": "Groq — Generate Answer", "type": "main", "index": 0 }]
+      ]
+    },
+    "Groq — Generate Answer": {
+      "main": [[{ "node": "Format Answer", "type": "main", "index": 0 }]]
+    },
+    "Format Answer": {
+      "main": [[{ "node": "Send Answer to Telegram", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "tags": []
+}
